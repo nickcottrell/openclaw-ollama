@@ -425,9 +425,7 @@ gateway_start() {
     mkdir -p "${LOG_DIR}"
     if [[ ! -f "${OPENCLAW_DIR}/dist/control-ui/index.html" ]]; then
         _log "Building UI (first time)..."
-        (cd "${OPENCLAW_DIR}" && npm run ui:build >> "${LOG_DIR}/gateway.log" 2>&1) || {
-            _err "UI build failed"; return 1;
-        }
+        build_ui || { _err "UI build failed"; return 1; }
     fi
     _log "Starting gateway on ${OPENCLAW_PORT}..."
     (cd "${OPENCLAW_DIR}" && npm run openclaw -- gateway --port "${OPENCLAW_PORT}" >> "${LOG_DIR}/gateway.log" 2>&1) &
@@ -466,16 +464,88 @@ gateway_status() {
 # UI BUILD
 # ============================================================
 
-build_ui() {
-    if [[ ! -d "${OPENCLAW_DIR}" ]]; then
-        _err "OpenClaw not found at ${OPENCLAW_DIR}"
-        return 1
+UI_MODE_FILE="${SCRIPT_DIR}/.ui-mode"
+
+_ui_mode() {
+    if [[ -f "${UI_MODE_FILE}" ]]; then
+        cat "${UI_MODE_FILE}"
+    else
+        echo "standalone"
     fi
-    _log "Building UI..."
-    (cd "${OPENCLAW_DIR}" && npm run ui:build 2>&1) || {
-        _err "UI build failed"; return 1;
-    }
-    _ok "UI build complete"
+}
+
+build_ui() {
+    local mode="${1:-$(_ui_mode)}"
+    local UI_DST="${OPENCLAW_DIR}/dist/control-ui"
+
+    case "${mode}" in
+        standalone)
+            local UI_SRC="${SCRIPT_DIR}/ui"
+            if [[ ! -d "${UI_SRC}" ]]; then
+                _err "UI source not found at ${UI_SRC}"
+                return 1
+            fi
+            mkdir -p "${UI_DST}"
+            _log "Copying standalone UI..."
+            cp "${UI_SRC}/index.html"     "${UI_DST}/index.html"
+            cp "${UI_SRC}/chat.css"       "${UI_DST}/chat.css"
+            cp "${UI_SRC}/gateway.js"     "${UI_DST}/gateway.js"
+            cp "${UI_SRC}/chat.js"        "${UI_DST}/chat.js"
+            cp "${UI_SRC}/marked.min.js"  "${UI_DST}/marked.min.js"
+            cp "${UI_SRC}/purify.min.js"  "${UI_DST}/purify.min.js"
+            echo "standalone" > "${UI_MODE_FILE}"
+            _ok "Standalone UI copied (6 files)"
+            ;;
+        original)
+            if [[ ! -d "${OPENCLAW_DIR}" ]]; then
+                _err "OpenClaw not found at ${OPENCLAW_DIR}"
+                return 1
+            fi
+            _log "Building original UI (npm)..."
+            (cd "${OPENCLAW_DIR}" && npm run ui:build 2>&1) || {
+                _err "UI build failed"; return 1;
+            }
+            echo "original" > "${UI_MODE_FILE}"
+            _ok "Original UI built"
+            ;;
+        *)
+            _err "Unknown UI mode: ${mode}"
+            echo "  Usage: ./hooks.sh build [standalone|original]"
+            return 1
+            ;;
+    esac
+}
+
+ui_switch() {
+    local current
+    current=$(_ui_mode)
+    local target="${1:-}"
+
+    if [[ -z "${target}" ]]; then
+        echo ""
+        echo -e "  ${_B}UI Mode${_N}"
+        echo -e "  ${_D}────────────────────${_N}"
+        echo -e "  Current: ${_G}${current}${_N}"
+        echo ""
+        echo -e "  ${_D}Switch:${_N}"
+        echo -e "    ./hooks.sh ui standalone   ${_D}-- 4-file vanilla JS (default)${_N}"
+        echo -e "    ./hooks.sh ui original     ${_D}-- full framework (npm build)${_N}"
+        echo ""
+        return 0
+    fi
+
+    if [[ "${target}" = "${current}" ]]; then
+        _ok "Already using ${target} UI"
+        return 0
+    fi
+
+    build_ui "${target}" || return 1
+
+    if _port_alive "${OPENCLAW_PORT}"; then
+        echo ""
+        _warn "Gateway is running -- restart to serve the new UI"
+        echo -e "  ${_D}./hooks.sh stop && ./hooks.sh start${_N}"
+    fi
 }
 
 # ============================================================
@@ -611,6 +681,8 @@ open_chat() {
         _err "Gateway not running on ${OPENCLAW_PORT}"
         return 1
     fi
+    # ensure UI is current before opening
+    build_ui > /dev/null 2>&1
     local token
     token=$(python3 -c "import json; print(json.load(open('${CONFIG_DIR}/openclaw.json')).get('gateway',{}).get('auth',{}).get('token',''))" 2>/dev/null) || token=""
     local url="http://localhost:${OPENCLAW_PORT}"
@@ -620,7 +692,9 @@ open_chat() {
         echo -e "  ${_Y}Token:${_N} ${token}"
         echo ""
     fi
-    _log "Opening ${url%%\?*}"
+    local mode
+    mode=$(_ui_mode)
+    _log "Opening ${url%%\?*}  ${_D}(${mode} UI)${_N}"
     open "${url}" 2>/dev/null || echo "  Visit: ${url}"
 }
 
@@ -1192,6 +1266,56 @@ nuke_logs() {
     echo ""
 }
 
+command_index() {
+    local mode
+    mode=$(_ui_mode)
+    echo ""
+    echo -e "  ${_B}Command Index${_N}"
+    echo -e "  ${_D}────────────────────────────────────────────${_N}"
+    echo ""
+    echo -e "  ${_B}Services${_N}"
+    echo -e "    start              ${_D}Start gateway + warm Ollama + sync workspace${_N}"
+    echo -e "    stop               ${_D}Stop gateway${_N}"
+    echo -e "    stop-all           ${_D}Stop gateway + Ollama (full shutdown)${_N}"
+    echo -e "    status             ${_D}Show service status${_N}"
+    echo -e "    gateway-start      ${_D}Start gateway only${_N}"
+    echo -e "    gateway-stop       ${_D}Stop gateway only${_N}"
+    echo ""
+    echo -e "  ${_B}Chat${_N}"
+    echo -e "    chat               ${_D}Open chat UI in browser${_N}"
+    echo ""
+    echo -e "  ${_B}UI${_N}  ${_D}(current: ${_G}${mode}${_D})${_N}"
+    echo -e "    build [mode]       ${_D}Build UI (standalone|original)${_N}"
+    echo -e "    ui                 ${_D}Show current UI mode${_N}"
+    echo -e "    ui standalone      ${_D}Switch to 4-file vanilla JS UI${_N}"
+    echo -e "    ui original        ${_D}Switch to full framework (npm build)${_N}"
+    echo ""
+    echo -e "  ${_B}Workspace${_N}"
+    echo -e "    workspace          ${_D}Show workspace source + destination${_N}"
+    echo -e "    sync               ${_D}Sync workspace (source -> destination)${_N}"
+    echo -e "    clear-workspace    ${_D}Wipe destination workspace${_N}"
+    echo -e "    reset-workspace    ${_D}Clear + re-sync from source${_N}"
+    echo ""
+    echo -e "  ${_B}Ollama${_N}"
+    echo -e "    ollama             ${_D}Ollama info (version, models, VRAM)${_N}"
+    echo -e "    models             ${_D}List installed models${_N}"
+    echo -e "    warmup             ${_D}Pre-load model (1h idle timeout)${_N}"
+    echo -e "    unload             ${_D}Unload models from VRAM${_N}"
+    echo -e "    pull <model>       ${_D}Pull a model (e.g. pull llama3.2:3b)${_N}"
+    echo -e "    bench [model]      ${_D}Benchmark models (or specific model)${_N}"
+    echo -e "    switch             ${_D}Switch gateway model (interactive)${_N}"
+    echo -e "    quick-chat [model] ${_D}Direct chat with Ollama (bypass gateway)${_N}"
+    echo ""
+    echo -e "  ${_B}Diagnostics${_N}"
+    echo -e "    health             ${_D}Run health check${_N}"
+    echo -e "    security           ${_D}Security audit${_N}"
+    echo -e "    debug              ${_D}Show paths, PIDs, uptime, UI build info${_N}"
+    echo -e "    logs [n]           ${_D}Show last n lines of logs (default 40)${_N}"
+    echo -e "    nuke-logs          ${_D}Wipe all logs (gateway + ollama)${_N}"
+    echo -e "    commands           ${_D}This index${_N}"
+    echo ""
+}
+
 # ============================================================
 # CLI DISPATCH (when run directly)
 # ============================================================
@@ -1213,7 +1337,8 @@ if [[ "${BASH_SOURCE[0]}" = "$0" ]]; then
         ollama)         ollama_info ;;
         models)         ollama_models ;;
         pull)           ollama_pull "${1:-}" ;;
-        build)          build_ui ;;
+        build)          build_ui "${1:-}" ;;
+        ui)             ui_switch "${1:-}" ;;
         bench)          ollama_bench "${1:-}" ;;
         switch)         ollama_switch ;;
         quick-chat)     ollama_chat "${1:-}" ;;
@@ -1225,35 +1350,16 @@ if [[ "${BASH_SOURCE[0]}" = "$0" ]]; then
         workspace)      workspace_status ;;
         clear-workspace) clear_workspace ;;
         reset-workspace) reset_workspace ;;
+        commands)       command_index ;;
         *)
             echo "Usage: ./hooks.sh <command>"
             echo ""
-            echo "  start            Start gateway, sync workspace"
-            echo "  stop             Stop gateway"
-            echo "  stop-all         Stop gateway + Ollama (full shutdown)"
-            echo "  status           Check service status"
-            echo "  chat             Open chat UI in browser"
-            echo "  build            Build UI from source"
+            echo "  start       Start gateway + warm Ollama + sync workspace"
+            echo "  stop        Stop gateway"
+            echo "  status      Show service status"
+            echo "  chat        Open chat UI in browser"
             echo ""
-            echo "  workspace        Show workspace source + destination"
-            echo "  sync             Sync workspace (source -> destination)"
-            echo "  clear-workspace  Wipe destination workspace"
-            echo "  reset-workspace  Clear + re-sync from source"
-            echo ""
-            echo "  ollama           Ollama info (version, models, VRAM)"
-            echo "  models           List installed models"
-            echo "  warmup           Pre-load model (1h idle timeout)"
-            echo "  unload           Unload models from VRAM"
-            echo "  pull <m>         Pull a model (e.g. pull llama3.2:3b)"
-            echo "  bench [m]        Benchmark models (or specific model)"
-            echo "  switch           Switch gateway model"
-            echo "  quick-chat       Direct chat with Ollama"
-            echo ""
-            echo "  security         Security audit"
-            echo "  health           Run health check"
-            echo "  logs [n]         Show last n lines of logs (default 40)"
-            echo "  nuke-logs        Wipe all logs (gateway + ollama)"
-            echo "  debug            Show debug info"
+            echo "  commands    Show all available commands"
             echo ""
             ;;
     esac

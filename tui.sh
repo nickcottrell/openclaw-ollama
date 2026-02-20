@@ -123,7 +123,7 @@ _debug_menu() {
             "Debug info" \
             "View logs" \
             "Nuke logs" \
-            "Build UI" \
+            "Command index" \
             "Workspace" \
             "Back" || true
 
@@ -133,7 +133,7 @@ _debug_menu() {
             2) tput clear 2>/dev/null; debug_info; _wait ;;
             3) tput clear 2>/dev/null; view_logs; _wait ;;
             4) tput clear 2>/dev/null; nuke_logs; _wait ;;
-            5) tput clear 2>/dev/null; build_ui; _wait ;;
+            5) tput clear 2>/dev/null; command_index; _wait ;;
             6) _workspace_menu ;;
             7|*) return ;;
         esac
@@ -155,19 +155,21 @@ while true; do
         "Start all" \
         "Stop gateway" \
         "Stop everything" \
-        "Open chat" \
+        "Security" \
         "Ollama" \
         "Debug" \
+        "Chat" \
         "Quit" || true
 
     case "${TUI_INDEX}" in
-        0) start_all; _wait ;;
-        1) stop_all; _wait ;;
-        2) stop_everything; _wait ;;
-        3) open_chat ;;
+        0) start_all || true; _wait ;;
+        1) stop_all || true; _wait ;;
+        2) stop_everything || true; _wait ;;
+        3) tput clear 2>/dev/null; security_check || true; _wait ;;
         4) _ollama_menu ;;
         5) _debug_menu ;;
-        6) tput clear 2>/dev/null; echo ""; echo -e "  ${_C_DIM}bye${_C_RESET}"; echo ""; exit 0 ;;
+        6) open_chat || true ;;
+        7) tput clear 2>/dev/null; echo ""; echo -e "  ${_C_DIM}bye${_C_RESET}"; echo ""; exit 0 ;;
         *) ;;
     esac
 

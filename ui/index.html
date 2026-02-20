@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ollama Claw</title>
+
+  <!-- styles -->
+  <link rel="stylesheet" href="chat.css">
+
+  <!-- markdown rendering (local, CSP-safe) -->
+  <script src="marked.min.js"></script>
+  <script src="purify.min.js"></script>
+</head>
+<body>
+  <div class="chat-page">
+
+    <!-- header -->
+    <header class="chat-header">
+      <div class="chat-header__left">
+        <span class="status-dot status-dot--disconnected" id="status-dot" title="Disconnected"></span>
+        <span class="chat-header__name" id="assistant-name">Assistant</span>
+      </div>
+      <div class="chat-header__right">
+        <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme">
+          <!-- moon (shown in dark mode) -->
+          <svg class="icon-moon" viewBox="0 0 24 24">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <!-- sun (shown in light mode) -->
+          <svg class="icon-sun" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </button>
+        <button class="btn btn--sm" id="btn-new" type="button">New</button>
+      </div>
+    </header>
+
+    <!-- chat thread -->
+    <section class="chat-thread" id="chat-thread" role="log" aria-live="polite" aria-label="Chat messages">
+      <div class="chat-empty" id="chat-empty">
+        <div class="chat-empty__icon" aria-hidden="true">&#x1F4AC;</div>
+        <p>Start a conversation</p>
+      </div>
+    </section>
+
+    <!-- compose -->
+    <footer class="chat-compose">
+      <div class="chat-compose__field">
+        <label for="compose-input" class="sr-only">Message</label>
+        <textarea id="compose-input"
+                  placeholder="Type a message..."
+                  rows="1"
+                  autocomplete="off"
+                  autofocus></textarea>
+      </div>
+      <div class="chat-compose__actions">
+        <button class="btn btn--primary" id="btn-send" type="button">Send</button>
+        <button class="btn btn--danger hidden" id="btn-stop" type="button">Stop</button>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- scripts (order matters: gateway first) -->
+  <script src="gateway.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>
