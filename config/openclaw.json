@@ -23,26 +23,14 @@
     "defaults": {
       "model": {
         "primary": "ollama/qwen2.5:7b"
-      },
-      "compaction": {
-        "mode": "safeguard"
       }
     }
-  },
-  "commands": {
-    "native": "auto",
-    "nativeSkills": "auto",
-    "restart": true
   },
   "gateway": {
     "port": 18789,
     "mode": "local"
   },
   "tools": {
-    "byProvider": {
-      "ollama": {
-        "deny": ["tts", "message", "cron", "gateway"]
-      }
-    }
+    "allow": ["read", "write", "edit", "exec"]
   }
 }
